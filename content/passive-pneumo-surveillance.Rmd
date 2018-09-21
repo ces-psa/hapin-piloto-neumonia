@@ -163,7 +163,7 @@ lus_results <- lus_data_emory %>%
 
 
 
-```{r}
+```{r, results='asis'}
 
 # stop("add WHO RR thresholds and danger signs for pneumonia definitions")
 #
@@ -430,7 +430,7 @@ pneumo_classified %>%
 pneumo_classified %>%
   filter(respiratory) %>%
   select(
-    record_id,
+    record_id, age_group,
     who_pneumonia,
     severe_who_pneumonia = who_pneumonia_severe,
     hapin_pneumonia,
@@ -442,29 +442,29 @@ pneumo_classified %>%
     factor_key = TRUE
   ) %>%
   filter(value) %>%
-  group_by(case_group) %>%
+  group_by(age_group, case_group) %>%
   mutate(
     n = n(),
     case_label = recode_factor(case_group, !!!case_names_sp)
   ) %>%
   ungroup() %>%
-  select(record_id, case_group, everything(), -value) %>%
+  select(record_id, age_group, case_group, everything(), -value) %>%
   gather(
     key = symptom, value = present,
-    -record_id, -case_group, -case_label, -n,
+    -record_id, -age_group, -case_group, -case_label, -n,
     factor_key = TRUE
   ) %>%
   mutate(
     symptom = recode_factor(
       symptom,
       tachypnea = "Taquipnea",
-      chest_indrawing = "Tiraje",
-      danger_signs = "Signos de peligro",
-      hypoxemia = "Hipoxemia",
-      lus_pneumonia = "Neumonía por ultrasonido"
+      chest_indrawing = "Chest indrawing",
+      danger_signs = "Danger signs",
+      hypoxemia = "Hypoxemia",
+      lus_pneumonia = "Ultrasound confirmed pneumonia"
     )
   ) %>%
-  group_by(case_label, n, symptom) %>%
+  group_by(age_group, case_label, n, symptom) %>%
   summarize(
     assessed = sum(!is.na(present)),
     present = sum(present, na.rm = TRUE),
@@ -474,9 +474,23 @@ pneumo_classified %>%
     symptom = symptom,
     text = paste0(present, " / ", assessed, " (", percent, "%)")
   ) %>%
+  ungroup() %>%
   spread(symptom, text) %>%
-  rename(" " = case_label) %>%
-  knitr::kable()
+  split(.$age_group) %>%
+  purrr::walk(
+      ~ {
+          .ag <- first(.x$age_group)
+        
+          rename(.x, " " = case_label) %>%
+            select(-age_group) %>%
+            knitr::kable(
+                caption = paste(
+                    "Characteristics of pneumonia cases for children of age", .ag, "months."
+                )
+            ) %>%
+            print()
+      }
+  )
 
 
 
@@ -525,10 +539,11 @@ pneumo_classified %>%
 
 
 
-```{r}
+```{r, results='asis'}
 
 pneumo_classified %>%
   select(
+    age_group,
     cough,
     difficulty_breathing,
     respiratory,
@@ -542,6 +557,7 @@ pneumo_classified %>%
     hapin_pneumonia
   ) %>%
   transmute(
+    age_group,
     definition1 = case_when(
       cough & difficulty_breathing ~ "both",
       cough ~ "first",
@@ -565,8 +581,8 @@ pneumo_classified %>%
       TRUE ~ "none"
     )
   ) %>%
-  gather(group, value, factor_key = TRUE) %>%
-  count(group, value) %>%
+  gather(group, value, -age_group, factor_key = TRUE) %>%
+  count(age_group, group, value) %>%
   filter(!grepl("case_type", as.character(group))) %>%
   mutate(
     panel = recode_factor(
@@ -599,10 +615,11 @@ pneumo_classified %>%
       ))
     )
   ) %>%
-  group_by(panel) %>%
+  group_by(age_group, panel) %>%
   mutate(cases = sum(n[value != "none"], na.rm = TRUE)) %>%
   spread(value, n, 0) %>%
   select(
+    age_group,
     "Case definition" = panel,
     Symptoms = group,
     "Only symptom **a**" = first,
@@ -611,10 +628,21 @@ pneumo_classified %>%
     Cases = cases,
     "Not cases" = none
   ) %>%
-  knitr::kable(
-    caption = paste(
-      "Number of cases for each case definition, based on the symptoms."
-    )
+  ungroup() %>%
+  split(.$age_group) %>%
+  walk(
+    ~ {
+      .ag <- first(.x$age_group)
+      
+      select(.x, -age_group) %>%
+        knitr::kable(
+        caption = paste(
+          "Number of cases for each case definition, based on the symptoms,",
+          "for children of age", .ag
+        )
+      ) %>%
+        print()
+    }
   )
 
 ```
@@ -649,7 +677,7 @@ pneumo_weeks <- pneumo_classified %>%
   filter(
     date >= as.Date("2018-02-20")
   ) %>%
-  count(service_type, case_group, week) %>%
+  count(age_group, service_type, case_group, week) %>%
   spread(case_group, n, fill = 0)
 
 
@@ -669,35 +697,59 @@ if(
 
 
 
-```{r cases, fig.width=7.5}
-
-
+```{r cases, fig.width=7.5, results='asis'}
 surveillance_weeks %>%
-  full_join(pneumo_weeks) %>%
   group_by(service_type) %>%
   summarize_at(
     vars(-service_type, -week),
     funs(round(sum(., na.rm = TRUE)))
   ) %>%
-  mutate(
-    Surveillance = paste0(person_hours, " (", days, ")")
-  ) %>%
   select(
     "Service type" = service_type,
-    "Surveillance effort" = Surveillance,
-    !!!cr(case_names), -not_pneumonia
+    "Days with surveillance" = days,
+    "Surveillance person hours" = person_hours
   ) %>%
   knitr::kable(
-    caption = paste(
-      "\\label{pneumo-cases}Number of each pneumonia definition detected by service type.",
-      "Each case is only included within the most severe case definition",
-      "that applies to it.",
-      "\nSurveillance effort recorded in person-hours (days present in service)."
-    )
+    caption = "Total surveillance effort by site."
   )
 
+pneumo_weeks %>%
+  group_by(age_group, service_type) %>%
+  summarize_at(
+    vars(-age_group, -service_type, -week),
+    funs(round(sum(., na.rm = TRUE)))
+  ) %>%
+  select(
+    age_group,
+    "Service type" = service_type,
+    !!!cr(case_names), -not_pneumonia
+  ) %>%
+  ungroup() %>%
+  split(.$age_group) %>%
+  walk(
+    ~{
+      .ag <- first(.x$age_group)
+      
+      select(.x, -age_group) %>%
+        knitr::kable(
+          caption = paste(
+            "\\label{pneumo-cases}Number of each pneumonia definition detected by service type",
+            "for children of age", .ag,
+            "Each case is only included within the most severe case definition",
+            "that applies to it.",
+            "Surveillance effort recorded in person-hours (days present in service)."
+          )
+        ) %>%
+        print()
+    }
+  )
+```
 
 
+
+
+
+```{r, fig.width=7, fig.height=8}
 
 
 weekly_cases <- surveillance_weeks %>%
@@ -726,18 +778,17 @@ weekly_cases %>%
     x = "Epidemiological week",
     y = "Number of cases"
   ) +
-  facet_wrap(~ service_type, nrow = 1) +
+  facet_grid(gsub(" mont", "\nmont", age_group) ~ service_type) +
   coord_equal() +
   scale_x_continuous(expand = c(0, 0)) +
   scale_y_continuous(expand = c(0, 0)) +
   theme(
-    legend.position = c(1, 0),
-    legend.justification = c(1, 0),
+    legend.position = "bottom",
     legend.background = element_rect(fill = "transparent"),
     legend.key.height = unit(1.3, "lines"),
     legend.text = element_text(size = 7),
     legend.title = element_text(size = 8),
-    panel.spacing.x = unit(1, "lines")
+    panel.spacing = unit(1, "lines")
   )
 
 
@@ -769,6 +820,7 @@ sp_plot %+%
   )
 
 ```
+
 
 
 
