@@ -157,13 +157,9 @@ lus_results <- lus_data_emory %>%
 ```
 
 
-\blandscape
-
-# Severity symptoms by age group and case type
 
 
-
-```{r, results='asis'}
+```{r classify-cases}
 
 # stop("add WHO RR thresholds and danger signs for pneumonia definitions")
 #
@@ -305,6 +301,11 @@ pneumo_classified_new <- pneumo_visits_new %>%
     ),
     age_days = as.numeric(today - dateofbirth, unit = "days"),
     age_months = age_days / ml,
+    sex = recode_factor(
+      sexo,
+      `1` = "female",
+      `2` = "male"
+    ),
     age_group = case_when(
       age_months < 2 ~ "0 - <2 months",
       age_months < 12 ~ "02 - <12 months",
@@ -363,7 +364,7 @@ pneumo_classified_new <- pneumo_visits_new %>%
   # ) %>%
   select(
     municipality, date = today, time, service_type, period, #log_date,
-    record_id, study, group, age_months, age, age_group,
+    record_id, study, group, age_months, age, age_group, sex,
     cough, difficulty_breathing, chest_indrawing,
     rr, tachypnea, danger_signs, oxy_mean, hypoxemia,
     lus_pneumonia,
@@ -395,6 +396,63 @@ pneumo_classified <- bind_rows(
   pneumo_classified_old,
   pneumo_classified_new
 )
+
+```
+
+
+
+
+# Sex and age
+
+```{r}
+pneumo_classified %>%
+  mutate(
+    sex = if_else(
+      condition = is.na(sex),
+      true = "not recorded",
+      false = as.character(sex)
+    )
+  ) %>%
+  count(age_group, sex, case_group) %>%
+  spread(sex, n, fill = "--") %>%
+  mutate(
+    age_group = if_else(
+      condition = duplicated(age_group),
+      true = "",
+      false = age_group
+    ),
+    case_group = recode(
+      case_group,
+      not_pneumonia = "Respiratory illness",
+      who_pneumonia = "WHO pneumonia",
+      severe_who_pneumonia = "WHO severe pneumonia",
+      hapin_pneumonia = "HAPIN pneumonia"
+    )
+  ) %>%
+  set_names(
+    names(.) %>%
+      gsub("_", " ", .)
+  ) %>%
+  knitr::kable(
+    caption = paste(
+      "Distribution of cases given age and sex.",
+      "Sex was not recorded prior to August 15 2018",
+      "(i.e. few cases coded with sex so far, most included in column",
+      "'`not recoded`')"
+    )
+  )
+```
+
+
+
+
+\blandscape
+
+# Severity symptoms by age group and case type
+
+
+
+```{r, results='asis'}
 
 
 # ARI missing site log
