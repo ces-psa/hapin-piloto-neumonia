@@ -1,0 +1,978 @@
+---
+title: "Passive pneumonia surveillance report"
+date: "`r lubridate::today()`"
+output:
+  pdf_document:
+    latex_engine: xelatex
+  odt_document: default
+  html_document: default
+header-includes:
+- \usepackage{caption}
+- \usepackage{color}
+- \usepackage{hyperref}
+- \hypersetup{colorlinks=true, citecolor=gray}
+- \usepackage{pdflscape}
+- \newcommand{\blandscape}{\begin{landscape}}
+- \newcommand{\elandscape}{\end{landscape}}
+- \makeatletter\renewcommand*{\fps@figure}{H}\makeatother
+---
+
+```{r setup, include=FALSE}
+# Load used packages
+library(package = "tidyverse")
+
+# Setup knitting
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+
+# Set default theme
+theme_set(
+  theme_bw() +
+    theme(
+      title = element_text(face = "bold"),
+      plot.subtitle = element_text(face = "plain")
+    )
+)
+
+# Get labels
+source(file = "./scripts/labels.R")
+
+# Utility functions
+# Function to compute paralell means
+pmean <- function(x, y, na.rm = TRUE){
+  map2_dbl(x, y, ~ mean(c(.x, .y), na.rm = na.rm))
+}
+
+# Function to standardize community names
+community_name <- . %>%
+  iconv(to = "ASCII//TRANSLIT") %>%
+  tolower() %>%
+  gsub("[^a-z ]", "", .) %>%
+  gsub("(^| )([a-z])", "\\1\\U\\2", ., perl = TRUE)
+
+# Set month length
+ml <- 365.25 / 12
+
+
+
+# Labelling
+
+case_names <- c(
+  "not_pneumonia" = "Not pneumonia",
+  "who_pneumonia" = "WHO pneumonia",
+  "severe_who_pneumonia" = "Severe WHO pneumonia",
+  "hapin_pneumonia" = "HAPIN pneumonia"
+)
+
+case_names_sp <- c(
+  "not_pneumonia" = "No neumonía",
+  "who_pneumonia" = "Neumonía OMS",
+  "severe_who_pneumonia" = "Neumonía Severa OMS",
+  "hapin_pneumonia" = "Neumonía HAPIN"
+)
+
+cr <- function(x){
+  rx <- names(x)
+  names(rx) <- x
+  return(rx)
+}
+
+```
+
+
+
+```{r get-data, include=FALSE}
+# RedCap exports
+source(file = "./scripts/process-emory-redcap-export.R")
+source(file = "./scripts/process-gt-redcap-export.R")
+source(file = "./scripts/surveillance-effort.R")
+# source(file = "./scripts/rr-oxy.R")
+```
+
+
+
+```{r lus}
+# Match ultrasound and surveillance IDs
+lus_ids <- readxl::read_excel(
+  path = "./data/logs/FORMULARIOS PARA USG LUS.xlsx", skip = 5
+) %>%
+  select(record_id = C34, c36_id = C36)
+
+# # Prepare lung ultrasound data
+# lus_pneumonia <- c34 %>%
+#   gather(variable, value, matches("^[a-z]{3}_")) %>%
+#   separate(variable, into = c("study", "variable"), sep = "_") %>%
+#   mutate(
+#     variable = recode(
+#       variable,
+#       condolidation = "consolidation"
+#     )
+#   ) %>%
+#   nest(study, variable, value) %>%
+#   mutate(
+#     data = map(data, spread, variable, value),
+#     consolidation = map(data, ~any(.x$consolidation == 1)),
+#     time = paste(date, start)
+#   )
+
+# lus_results <- lus_ids %>%
+#   full_join(lus_pneumonia, by = c(c34_id = "record_id")) %>%
+#   select(record_id, c34_id, lus_pneumonia = pneumonia) %>%
+#   filter(complete.cases(.)) %>%
+#   mutate(
+#     record_id = as.character(record_id),
+#     lus_pneumonia = as.logical(lus_pneumonia)
+#   )
+
+lus_results <- lus_data_emory %>%
+  bind_rows(lus_data_uvg) %>%
+  # Tag with CIC formated IDs
+  left_join(lus_ids) %>%
+  mutate(
+    record_id = if_else(
+      condition = !is.na(c36_id),
+      true = as.character(c36_id),
+      false = record_id
+    )
+  )
+```
+
+
+
+
+```{r rr-oxy}
+# rr_oxy <- complete_data %>%
+#     mutate(
+#         rr_rc = pmean(m_rr1, m_rr2, na.rm = TRUE),
+#         rr_log = pmean(manual_rr_1, manual_rr_2, na.rm = TRUE),
+#         mean_rr = ifelse(
+#             test = !is.na(rr_rc),
+#             yes = rr_rc,
+#             no = rr_log
+#         )
+#     ) %>%
+#     select(
+#         record_id, lat, long, age_months, age_days, 
+#         mean_rr, mean_oxy
+#     )
+```
+
+
+\blandscape
+
+# Severity symptoms by age group and case type
+
+
+
+```{r}
+
+# stop("add WHO RR thresholds and danger signs for pneumonia definitions")
+#
+# Neumonía OMS: Tos y/o DR + taquipnea (dependiendo de edad)
+# Neumonía severa OMS: neumonía severa + DS (diferente en menores de 2 m)
+# Neumonía severa HAPIN: neumonía severa OMS + LUS/HYPOXIMIA
+#
+# Respiratoria si A1 o A2 es SI
+# Neumonia:  Si A1 o A2 es SI + C1 o C6  es SI
+# Neumonia Severa:  Si A1 o A2 es SI + C1 o C6 es SI +  1 signo de peligro que son los de E1 a E11
+#
+# Para neumonía se dice taquipnea según  el AIEPI
+# Lactantes menores de 2 meses 60 o más veces por minuto
+# Lactantes de 2 a 11 meses    50 o más veces por minuto
+# 1 a 4 años                   40 o más veces por minuto
+#
+# Para mi sería mejor si pueden desglosarlo
+# Tamizados                 xxxxx
+# Sintomas respiratorios    xxxxx
+# Neumonia                  xxxxx
+# Neumonia Severa           xxxxx
+
+
+pneumo_classified_old <- pneumo_visits %>%
+  left_join(lus_results) %>%
+  # leave out household surveillance data
+  filter(
+    study == "clinic pneumonia surveillance"
+  ) %>%
+  mutate(
+    today = as.Date(today),
+    period = case_when(
+      today < as.Date("2018-02-20") ~ "Tamizaje niño sano",
+      today >= as.Date("2018-02-20") ~ "Exclusivo neumonía",
+      TRUE ~ "otro"
+    ),
+    period = factor(
+      x = period,
+      levels = c("Tamizaje niño sano", "Exclusivo neumonía", "otro")
+    ),
+    age_days = as.numeric(today - dateofbirth, unit = "days"),
+    age_months = age_days / ml,
+    age_group = case_when(
+      age_months < 2 ~ "0 - <2 months",
+      age_months < 12 ~ "02 - <12 months",
+      age_months < 12*5 ~ "12 - <60 months",
+      TRUE ~ NA_character_
+    ),
+    cough = a01 == "1" & !is.na(a01),
+    difficulty_breathing = a02 == "1" & !is.na(a02),
+    chest_indrawing = c01 == 1 & !is.na(c01),
+    rr = pmean(c03, c04), # map2_dbl(c03, c04, ~ (.x + .y) / 2),
+    tachypnea = case_when(
+      age_group == "0 - <2 months" & rr >= 60 ~ TRUE,
+      age_group == "02 - <12 months" & rr >= 50 ~ TRUE,
+      age_group == "12 - <60 months"  & rr >= 40 ~ TRUE,
+      is.na(rr) ~ NA,
+      TRUE ~ FALSE
+    ),
+    danger_signs = (e01 == 1 | e02 == 1 | e03 == 1 | e04 == 1) | (
+      age_group == "0 - <2 months" & (
+        e05 == 1 |
+      e06 == 1 | e07 == 1 | e08 == 1 | e09 == 1 | e10 == 1
+      )
+    ),
+    oxy_mean = rowMeans(select(., d01, d02, d03), na.rm = TRUE),
+    # Get defined levels
+    hypoxemia = oxy_mean < 90,
+    # LUS data not yet available
+    lus_pneumonia = pneumonia,
+    # Case definitions
+    respiratory = cough | difficulty_breathing,
+    who_pneumonia = respiratory & (chest_indrawing | tachypnea),
+    c36_severe = e11,
+    who_pneumonia_severe = who_pneumonia & danger_signs,
+    hapin_pneumonia = who_pneumonia_severe & (
+      hypoxemia | lus_pneumonia
+    ),
+    municipality = recode_factor(
+      municipio,
+      `1` = "Jalapa",
+      `2` = "Mataquescuintla",
+      `3` = "Monjas",
+      `4` = "San Carlos Alzatate",
+      `5` = "San Luis Jilotepeque",
+      `6` = "San Pedro Pinula",
+      `7` = "San Manuel Chaparrón"
+    )
+  ) %>%
+  # left_join(
+  #   c4_rr_log %>%
+  #     bind_rows(c4_rr_log_cont) %>%
+  #     select(log_date = date, record_id, service_type)
+  # ) %>%
+  select(
+    municipality, date = today, time, service_type, period, #log_date,
+    record_id, study, group, age_months, age, age_group,
+    cough, difficulty_breathing, chest_indrawing,
+    rr, tachypnea, danger_signs, oxy_mean, hypoxemia,
+    lus_pneumonia,
+    respiratory, who_pneumonia, 
+    c36_severe, who_pneumonia_severe, hapin_pneumonia
+  ) %>%
+  mutate(
+    case_group = case_when(
+      hapin_pneumonia ~ "hapin_pneumonia",
+      who_pneumonia_severe ~ "severe_who_pneumonia",
+      who_pneumonia ~ "who_pneumonia",
+      TRUE ~ "not_pneumonia"
+    ),
+    case_group = factor(
+      case_group,
+      c(
+        "not_pneumonia", "who_pneumonia",
+        "severe_who_pneumonia", "hapin_pneumonia"
+      )
+    ),
+    week = lubridate::epiweek(date)
+  ) %>%
+  filter(date >= as.Date("2018-02-20"))
+
+
+pneumo_classified_new <- pneumo_visits_new %>%
+  left_join(lus_results) %>%
+  # leave out household surveillance data
+  filter(
+    study == "clinic pneumonia surveillance"
+  ) %>%
+  mutate(
+    today = as.Date(today),
+    period = case_when(
+      today < as.Date("2018-02-20") ~ "Tamizaje niño sano",
+      today >= as.Date("2018-02-20") ~ "Exclusivo neumonía",
+      TRUE ~ "otro"
+    ),
+    period = factor(
+      x = period,
+      levels = c("Tamizaje niño sano", "Exclusivo neumonía", "otro")
+    ),
+    age_days = as.numeric(today - dateofbirth, unit = "days"),
+    age_months = age_days / ml,
+    age_group = case_when(
+      age_months < 2 ~ "0 - <2 months",
+      age_months < 12 ~ "02 - <12 months",
+      age_months < 12*5 ~ "12 - <60 months",
+      TRUE ~ NA_character_
+    ),
+    cough = (a01 == "1" & !is.na(a01)) & (a01_1 < 14 & !is.na(a01_1)),
+    difficulty_breathing = (a02 == "1" & !is.na(a02)) & (a02_1 < 14 & !is.na(a02_1)),
+    chest_indrawing = c09 == 1 & !is.na(c09),
+    rr = pmean(d02_1, d02_2), # map2_dbl(c03, c04, ~ (.x + .y) / 2),
+    tachypnea = case_when(
+      age_group == "0 - <2 months" & rr >= 60 ~ TRUE,
+      age_group == "02 - <12 months" & rr >= 50 ~ TRUE,
+      age_group == "12 - <60 months"  & rr >= 40 ~ TRUE,
+      is.na(rr) ~ NA,
+      TRUE ~ FALSE
+    ),
+    fever = d01_2 > 37.5 & !is.na(d01_2),
+    hypothermia = d01_2 < 35.5 & !is.na(d01_2),
+    danger_signs = (
+      c01 == 1 | c02 == 1 | c04 == 1 | c05 == 1 | c06 == 1
+    ) | (
+      age_group == "0 - <2 months" & (
+        c07 == 1 | c08 == 1 | c09 == 1 | c10 == 1 | c11 == 1 |
+          c12 == 1 | c13 == 1 | c14 == 1 | c15 == 1 | c16 == 1 | c17 == 1 |
+          fever | hypothermia
+      )
+    ),
+    oxy_mean = rowMeans(select(., d03_2, d03_3, d03_4), na.rm = TRUE),
+    # Get defined levels
+    hypoxemia = oxy_mean < 90,
+    # LUS data not yet available
+    lus_pneumonia = pneumonia,
+    # Case definitions
+    respiratory = cough | difficulty_breathing,
+    who_pneumonia = respiratory & (chest_indrawing | tachypnea),
+    who_pneumonia_severe = who_pneumonia & danger_signs,
+    hapin_pneumonia = who_pneumonia_severe & (
+      hypoxemia | lus_pneumonia
+    ),
+    municipality = recode_factor(
+      municipio_e4acf8,
+      `1` = "Jalapa",
+      `2` = "Mataquescuintla",
+      `3` = "Monjas",
+      `4` = "San Carlos Alzatate",
+      `5` = "San Luis Jilotepeque",
+      `6` = "San Pedro Pinula",
+      `7` = "San Manuel Chaparrón"
+    )
+  ) %>%
+  # left_join(
+  #   c4_rr_log %>%
+  #     bind_rows(c4_rr_log_cont) %>%
+  #     select(log_date = date, record_id, service_type)
+  # ) %>%
+  select(
+    municipality, date = today, time, service_type, period, #log_date,
+    record_id, study, group, age_months, age, age_group,
+    cough, difficulty_breathing, chest_indrawing,
+    rr, tachypnea, danger_signs, oxy_mean, hypoxemia,
+    lus_pneumonia,
+    respiratory, who_pneumonia, 
+    who_pneumonia_severe, hapin_pneumonia
+  ) %>%
+  mutate(
+    case_group = case_when(
+      hapin_pneumonia ~ "hapin_pneumonia",
+      who_pneumonia_severe ~ "severe_who_pneumonia",
+      who_pneumonia ~ "who_pneumonia",
+      TRUE ~ "not_pneumonia"
+    ),
+    case_group = factor(
+      case_group,
+      c(
+        "not_pneumonia", "who_pneumonia",
+        "severe_who_pneumonia", "hapin_pneumonia"
+      )
+    ),
+    week = lubridate::epiweek(date)
+  ) %>%
+  filter(date >= as.Date("2018-02-20"))
+
+
+
+
+pneumo_classified <- bind_rows(
+  pneumo_classified_old,
+  pneumo_classified_new
+)
+
+
+# ARI missing site log
+# pneumo_classified %>%
+#   rename(rc_date = date) %>%
+#   select(rc_date, log_date, record_id, study, group, service_type) %>%
+#   arrange(rc_date) %>%
+#   filter(is.na(log_date), grepl("^34", record_id)) %>%
+#   invisible()
+
+
+pneumo_classified %>%
+  mutate(ari = TRUE) %>%
+  filter(group == "respiratory illnesses") %>% 
+  gather(key = pneumo, value = value, ari, who_pneumonia, who_pneumonia_severe, hapin_pneumonia) %>%
+  filter(value) %>%
+  count(study, group, service_type, period, pneumo) %>%
+  spread(service_type, n) %>%
+  {
+    if(interactive()) print(.)
+    invisible(.)
+  }
+
+pneumo_classified %>%
+  filter(is.na(service_type), !grepl("household", study)) %>%
+  arrange(group, date, record_id) %>%
+  writexl::write_xlsx(path = "output/falta_sitio.xlsx") %>%
+  invisible()
+
+
+
+
+pneumo_classified %>%
+  filter(respiratory) %>%
+  select(
+    record_id,
+    who_pneumonia,
+    severe_who_pneumonia = who_pneumonia_severe,
+    hapin_pneumonia,
+    tachypnea, chest_indrawing, danger_signs, hypoxemia, lus_pneumonia
+  ) %>%
+  gather(
+    key = case_group, value = value,
+    who_pneumonia, severe_who_pneumonia, hapin_pneumonia,
+    factor_key = TRUE
+  ) %>%
+  filter(value) %>%
+  group_by(case_group) %>%
+  mutate(
+    n = n(),
+    case_label = recode_factor(case_group, !!!case_names_sp)
+  ) %>%
+  ungroup() %>%
+  select(record_id, case_group, everything(), -value) %>%
+  gather(
+    key = symptom, value = present,
+    -record_id, -case_group, -case_label, -n,
+    factor_key = TRUE
+  ) %>%
+  mutate(
+    symptom = recode_factor(
+      symptom,
+      tachypnea = "Taquipnea",
+      chest_indrawing = "Tiraje",
+      danger_signs = "Signos de peligro",
+      hypoxemia = "Hipoxemia",
+      lus_pneumonia = "Neumonía por ultrasonido"
+    )
+  ) %>%
+  group_by(case_label, n, symptom) %>%
+  summarize(
+    assessed = sum(!is.na(present)),
+    present = sum(present, na.rm = TRUE),
+    percent = round(present / assessed * 100)
+  ) %>%
+  transmute(
+    symptom = symptom,
+    text = paste0(present, " / ", assessed, " (", percent, "%)")
+  ) %>%
+  spread(symptom, text) %>%
+  rename(" " = case_label) %>%
+  knitr::kable()
+
+
+
+
+# pneumo_classified %>%
+#   mutate(
+#     class = recode_factor(case_group, !!!case_names)
+#   ) %>%
+#   group_by(class, age_group) %>%
+#   mutate(
+#     n = n(),
+#     lus_pneumonia = ifelse(
+#       test = is.na(lus_pneumonia),
+#       yes = 0,
+#       no = lus_pneumonia
+#     )
+#   ) %>%
+#   summarize_at(
+#     vars(
+#       n, tachypnea, danger_signs, hypoxemia, lus_pneumonia,
+#       oxy_mean, rr
+#     ),
+#     funs(mean(., na.rm = TRUE))
+#   ) %>%
+#   mutate_at(
+#     vars(tachypnea, danger_signs, hypoxemia, lus_pneumonia),
+#     funs(paste(round(. * 100, 0), "%"))
+#   ) %>%
+#   mutate_at(
+#     vars(oxy_mean, rr),
+#     funs(round(., 1))
+#   ) %>%
+#   rename(lus = lus_pneumonia) %>%
+#   set_names(gsub("_", " ", names(.))) %>%
+#   knitr::kable(
+#     caption = "\\label{pneumo-symptoms}Frequency of symptoms within each pneumonia group"
+#   )
+
+```
+
+
+
+
+
+# Screening results for each pneumonia definition
+
+
+
+```{r}
+
+pneumo_classified %>%
+  select(
+    cough,
+    difficulty_breathing,
+    respiratory,
+    tachypnea,
+    chest_indrawing,
+    who_pneumonia,
+    danger_signs,
+    who_pneumonia_severe,
+    hypoxemia,
+    lus_pneumonia,
+    hapin_pneumonia
+  ) %>%
+  transmute(
+    definition1 = case_when(
+      cough & difficulty_breathing ~ "both",
+      cough ~ "first",
+      difficulty_breathing ~ "second",
+      TRUE ~ "none"
+    ),
+    definition2 = case_when(
+      respiratory & tachypnea & chest_indrawing ~ "both",
+      respiratory & tachypnea ~ "first",
+      respiratory & chest_indrawing ~ "second",
+      TRUE ~ "none"
+    ),
+    definition3 = case_when(
+      who_pneumonia & danger_signs ~ "first",
+      TRUE ~ "none"
+    ),
+    definition4 = case_when(
+      who_pneumonia_severe & hypoxemia & lus_pneumonia ~ "both",
+      who_pneumonia_severe & hypoxemia ~ "first",
+      who_pneumonia_severe & lus_pneumonia ~ "second",
+      TRUE ~ "none"
+    )
+  ) %>%
+  gather(group, value, factor_key = TRUE) %>%
+  count(group, value) %>%
+  filter(!grepl("case_type", as.character(group))) %>%
+  mutate(
+    panel = recode_factor(
+      gsub("[a-z_]", "", as.character(group)),
+      "1" = "Respiratory illness",
+      "2" = "WHO pneumonia",
+      "3" = "WHO severe pneumonia",
+      "4" = "HAPIN pneumonia"
+    ),
+    group = fct_relabel(
+      group,
+      recode,
+      case_type1 = "Respiratory case",
+      case_type2 = "WHO pneumonia",
+      case_type3 = "WHO severe pneumonia",
+      case_type4 = "HAPIN pneumonia",
+      definition1 = "a) Cough or b) difficulty breathing",
+      definition2 = "a) Chest indrawing or b) tachypnea",
+      definition3 = "a) Danger signs",
+      definition4 = "a) Hypoxemia or b) consolidation"
+    ),
+    value = factor(
+      value,
+      levels = c(c(
+        "first",
+        "second",
+        "both",
+        "case",
+        "none"
+      ))
+    )
+  ) %>%
+  group_by(panel) %>%
+  mutate(cases = sum(n[value != "none"], na.rm = TRUE)) %>%
+  spread(value, n, 0) %>%
+  select(
+    "Case definition" = panel,
+    Symptoms = group,
+    "Only symptom **a**" = first,
+    "Only symptom **b**" = second,
+    "Both symptoms" = both,
+    Cases = cases,
+    "Not cases" = none
+  ) %>%
+  knitr::kable(
+    caption = paste(
+      "Number of cases for each case definition, based on the symptoms."
+    )
+  )
+
+```
+
+
+\elandscape
+
+# Total number of cases
+
+```{r}
+# Calculate effort each week
+surveillance_weeks <- surveillance_effort %>%
+  filter(date >= as.Date("2018-02-20")) %>%
+  mutate(
+    week = lubridate::epiweek(date)
+  ) %>%
+  group_by(service_type, week, date) %>%
+  summarize(
+    working_hours = sum(surveillance_time),
+    person_hours = sum(surveillance_personnel * surveillance_time)
+  ) %>%
+  summarize(
+    days = n(),
+    working_hours = sum(working_hours),
+    person_hours = sum(person_hours)
+  ) %>%
+  ungroup()
+
+
+# Calculate cases each week
+pneumo_weeks <- pneumo_classified %>%
+  filter(
+    date >= as.Date("2018-02-20")
+  ) %>%
+  count(service_type, case_group, week) %>%
+  spread(case_group, n, fill = 0)
+
+
+
+if(
+  ! (
+    all(pneumo_weeks$week %in% surveillance_weeks$week) &
+    all(surveillance_weeks$week %in% pneumo_weeks$week)
+  )
+) {
+  warning("Revisar registros de esfuerzo de vigilancia.")
+}
+
+
+```
+
+
+
+
+```{r cases, fig.width=7.5}
+
+
+surveillance_weeks %>%
+  full_join(pneumo_weeks) %>%
+  group_by(service_type) %>%
+  summarize_at(
+    vars(-service_type, -week),
+    funs(round(sum(., na.rm = TRUE)))
+  ) %>%
+  mutate(
+    Surveillance = paste0(person_hours, " (", days, ")")
+  ) %>%
+  select(
+    "Service type" = service_type,
+    "Surveillance effort" = Surveillance,
+    !!!cr(case_names), -not_pneumonia
+  ) %>%
+  knitr::kable(
+    caption = paste(
+      "\\label{pneumo-cases}Number of each pneumonia definition detected by service type.",
+      "Each case is only included within the most severe case definition",
+      "that applies to it.",
+      "\nSurveillance effort recorded in person-hours (days present in service)."
+    )
+  )
+
+
+
+
+
+weekly_cases <- surveillance_weeks %>%
+  full_join(pneumo_weeks) %>%
+  gather(case_group, value, who_pneumonia, severe_who_pneumonia, hapin_pneumonia) %>%
+  mutate(
+    case_label = recode_factor(
+      case_group,
+      !!! gsub(" (pneumonia)", "\n\\1", case_names),
+      .ordered = TRUE
+    )
+  )
+
+weekly_cases %>%
+  ggplot() +
+  geom_col(
+      aes(x = week, y = value, fill = case_label),
+      width = 1
+  ) +
+  labs(
+    title = "Number of pneumonia cases detected during passive surveillance",
+    subtitle = paste(
+      "No surveillance on week 13 due to national holiday."
+    ),
+    fill = "Case type",
+    x = "Epidemiological week",
+    y = "Number of cases"
+  ) +
+  facet_wrap(~ service_type, nrow = 1) +
+  coord_equal() +
+  scale_x_continuous(expand = c(0, 0)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  theme(
+    legend.position = c(1, 0),
+    legend.justification = c(1, 0),
+    legend.background = element_rect(fill = "transparent"),
+    legend.key.height = unit(1.3, "lines"),
+    legend.text = element_text(size = 7),
+    legend.title = element_text(size = 8),
+    panel.spacing.x = unit(1, "lines")
+  )
+
+
+sp_plot <- last_plot() +
+  labs(
+    title = "Número de casos de neumonía detectados durante la vigilancia pasiva",
+    subtitle = paste(
+      "No hubo vigilancia en la semana 13 por semana santa."
+    ),
+    fill = "Tipo de caso",
+    x = "Semana epidemiológica",
+    y = "Número de casos"
+  )
+
+sp_plot %+% 
+  mutate(
+    weekly_cases,
+    case_label = recode_factor(case_group, !!!case_names_sp, .ordered = TRUE),
+    service_type = recode_factor(
+      service_type,
+      "Hospital" = "Hospital",
+      "Health Center" = "Centro de Salud",
+      "Health Post" = "Puesto de Salud"
+    )
+  ) %>%
+  ggsave(
+    filename = "output/sp_weekly_cases.png",
+    width = 7.5
+  )
+
+```
+
+
+
+## Table: Listing of symptoms for every HAPIN pneumonia case and severe WHO pneumonia case
+
+```{r hapin-cases-listing, results='asis'}
+
+pneumo_classified %>%
+  filter(case_group %in% c("hapin_pneumonia", "severe_who_pneumonia")) %>%
+  select(
+    record_id, municipality, service_type, case_group,
+    cough, difficulty_breathing,
+    tachypnea, chest_indrawing,
+    danger_signs,
+    hypoxemia, lus_pneumonia
+  ) %>%
+    gather(
+        symptom, present,
+        -c(record_id, municipality, service_type, case_group),
+        factor_key = TRUE
+    ) %>%
+    arrange(record_id) %>%
+    filter(present == 1) %>%
+    group_by(record_id, municipality, service_type, case_group) %>%
+    summarize(
+        Symptoms = symptom %>%
+            gsub("_", " ", .) %>%
+            paste(collapse = ",\n")
+    ) %>%
+    ungroup() %>%
+    mutate(
+        case_group = recode(case_group, !!!case_names)
+    ) %>%
+    arrange(case_group) %>%
+  column_to_rownames("record_id") %>%
+  set_names(gsub("_", "\n", names(.))) %>%
+  pander::pandoc.table(
+    split.tables = 100, keep.line.breaks = TRUE
+    # caption = "Listing of symptoms for every HAPIN pneumonia case"
+  )
+
+```
+
+
+
+
+# Respiratory rate and oxymetry
+
+```{r, fig.width=7, fig.height=8}
+measures_df <- pneumo_classified %>%
+  select(case_group, age_group, rr, oxy_mean) %>%
+  gather(variable, value, -case_group, -age_group) %>%
+  # Tag with thresholds
+  left_join(
+    tribble(
+             ~age_group, ~oxy_mean, ~rr,
+        "0 - <2 months",        95,  60,
+      "02 - <12 months",        95,  50,
+      "12 - <60 months",        95,  40
+    ) %>%
+      gather(variable, limit, -age_group)
+  ) %>%
+  mutate(
+    variable_label = recode(
+      variable,
+      oxy_mean = "Blood oxygen saturation (%)",
+      rr = "Respiratory rate per minute"
+    ),
+    case_label = recode_factor(
+      case_group,
+      !!! case_names
+    )
+  )
+
+measures_df %>%
+  ggplot() +
+  geom_vline(
+    aes(xintercept = limit),
+    linetype = "dashed", color = "grey60"
+  ) +
+  stat_density(
+    aes(x = value, color = case_label),
+    geom = "line", position = position_identity(), bw = 1
+  ) +
+  labs(
+    title = "Respiratory rate and blood oxygen saturation\ngiven age and pneumonia definition",
+    # subtitle = "",
+    x = "Measured value (averaged)",
+    y = "Density (Gaussian kernel, sd = 1)",
+    color = "Case type"
+  ) +
+  facet_grid(age_group ~ variable_label, scales = "free_x") +
+  scale_color_brewer(palette = "Set1", direction = -1) +
+  theme(
+    legend.position = c(0, 1),
+    legend.justification = c(0, 1),
+    legend.background = element_rect(fill = "transparent"),
+    legend.text = element_text(size = 8),
+    legend.title = element_text(size = 9),
+    legend.key.size = unit(0.7, "lines")
+  )
+
+
+
+sp_plot <- last_plot() +
+  labs(
+    title = "Tasa respiratoria y saturación de oxígeno en sangre\npor edad y definición de neumonía",
+    color = "Tipo de caso",
+    x = "Valor medidio (promediado)",
+    y = "Densidad"
+  )
+
+sp_plot %+% 
+  mutate(
+    measures_df,
+    case_label = recode_factor(case_group, !!!case_names_sp, .ordered = TRUE),
+    age_group = gsub("months", "meses", age_group),
+    variable_label = recode_factor(
+      variable,
+      oxy_mean = "Saturación de oxígeno en sangre (%)",
+      rr = "Frecuencia respiratoria por minuto"
+    )
+  ) %>%
+  ggsave(
+    filename = "output/sp_cases_measures.png",
+    width = 10
+  )
+```
+
+
+
+
+# Respiratory cases screened by day
+
+
+```{r}
+
+casos_hora <- pneumo_classified %>%
+  mutate(
+    hour = lubridate::hour(time),
+    day = date %>%
+      # Convertir fechas en días
+      lubridate::wday(label = TRUE, abbr = FALSE) %>%
+      # Cambiar el orden
+      fct_rev(),
+    day_en = date %>%
+      # Convertir fechas en días
+      lubridate::wday(label = TRUE, abbr = FALSE, locale = "en_US.UTF-8") %>%
+      # Cambiar el orden
+      fct_rev()
+  ) %>%
+  filter(service_type %in% c("Hospital", "Health Center"))
+
+
+max_people <- casos_hora %>%
+  filter(service_type %in% c("Hospital", "Health Center")) %>%
+  count(service_type, hour, day) %>%
+  pull(n) %>%
+  max()
+
+casos_hora %>%
+  ggplot() +
+  geom_bin2d(
+    aes(x = hour, y = day_en),
+    binwidth = 1
+  ) +
+  labs(
+    title = "Total screened patients by day and hour.",
+    x = "Hour",
+    y = "Day of the week",
+    fill = "Total\nscreened\npatients"
+  ) +
+  facet_grid(service_type ~ .) +
+  scale_x_continuous(breaks = 0:23) +
+  scale_fill_viridis_c() +
+  coord_equal() +
+  theme_bw()
+
+
+
+sp_plot <- last_plot() +
+  labs(
+    title = "Total de pacientes tamizados por día y hora.",
+    x = "Hora",
+    y = "Día de la semana",
+    fill = "Pacientes\natendidos\nen total"
+  )
+
+sp_plot %+%
+  mutate(
+    casos_hora,
+    day_en = day
+  ) %>%
+  ggsave(
+    filename = "output/sp_screened_patients.png",
+    width = 5
+  )
+
+# 
+# ggsave(
+#   filename = "output/wafle_casos_dias_horas.pdf", plot = casos_hora_crudos,
+#   width = 7.5, height = 7
+# )
+
+
+```
+
