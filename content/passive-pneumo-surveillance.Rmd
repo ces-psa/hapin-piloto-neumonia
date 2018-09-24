@@ -518,7 +518,7 @@ pneumo_classified %>%
   group_by(age_group, case_group) %>%
   mutate(
     n = n(),
-    case_label = recode_factor(case_group, !!!case_names_sp)
+    case_label = recode_factor(case_group, !!!case_names),
   ) %>%
   ungroup() %>%
   select(record_id, age_group, case_group, everything(), -value) %>%
