@@ -58,6 +58,7 @@ ml <- 365.25 / 12
 
 case_names <- c(
   "not_pneumonia" = "Not pneumonia",
+  "imci_secondary_outcome" = "IMCI secondary outcome",
   "who_pneumonia" = "WHO pneumonia",
   "severe_who_pneumonia" = "Severe WHO pneumonia",
   "hapin_pneumonia" = "HAPIN pneumonia"
@@ -65,6 +66,7 @@ case_names <- c(
 
 case_names_sp <- c(
   "not_pneumonia" = "No neumonía",
+  "imci_secondary_outcome" = "Caso AIEPI", 
   "who_pneumonia" = "Neumonía OMS",
   "severe_who_pneumonia" = "Neumonía Severa OMS",
   "hapin_pneumonia" = "Neumonía HAPIN"
@@ -236,6 +238,7 @@ pneumo_classified_old <- pneumo_visits %>%
     lus_pneumonia = pneumonia,
     # Case definitions
     respiratory = cough | difficulty_breathing,
+    imci_secondary_outcome = respiratory & danger_signs,
     who_pneumonia = respiratory & (chest_indrawing | tachypnea),
     c36_severe = e11,
     who_pneumonia_severe = who_pneumonia & danger_signs,
@@ -264,7 +267,7 @@ pneumo_classified_old <- pneumo_visits %>%
     cough, difficulty_breathing, chest_indrawing,
     rr, tachypnea, danger_signs, oxy_mean, hypoxemia,
     lus_pneumonia,
-    respiratory, who_pneumonia, 
+    respiratory, imci_secondary_outcome, who_pneumonia, 
     c36_severe, who_pneumonia_severe, hapin_pneumonia
   ) %>%
   mutate(
@@ -272,12 +275,13 @@ pneumo_classified_old <- pneumo_visits %>%
       hapin_pneumonia ~ "hapin_pneumonia",
       who_pneumonia_severe ~ "severe_who_pneumonia",
       who_pneumonia ~ "who_pneumonia",
+      imci_secondary_outcome ~ "imci_secondary_outcome",
       TRUE ~ "not_pneumonia"
     ),
     case_group = factor(
       case_group,
       c(
-        "not_pneumonia", "who_pneumonia",
+        "not_pneumonia", "imci_secondary_outcome", "who_pneumonia",
         "severe_who_pneumonia", "hapin_pneumonia"
       )
     ),
@@ -351,6 +355,7 @@ pneumo_classified_new <- pneumo_visits_new %>%
     lus_pneumonia = pneumonia,
     # Case definitions
     respiratory = cough | difficulty_breathing,
+    imci_secondary_outcome = respiratory & danger_signs,
     who_pneumonia = respiratory & (chest_indrawing | tachypnea),
     who_pneumonia_severe = who_pneumonia & danger_signs,
     hapin_pneumonia = who_pneumonia_severe & (
@@ -378,7 +383,7 @@ pneumo_classified_new <- pneumo_visits_new %>%
     cough, difficulty_breathing, chest_indrawing,
     rr, tachypnea, danger_signs, oxy_mean, hypoxemia,
     lus_pneumonia,
-    respiratory, who_pneumonia, 
+    respiratory, imci_secondary_outcome, who_pneumonia, 
     who_pneumonia_severe, hapin_pneumonia
   ) %>%
   mutate(
@@ -386,12 +391,13 @@ pneumo_classified_new <- pneumo_visits_new %>%
       hapin_pneumonia ~ "hapin_pneumonia",
       who_pneumonia_severe ~ "severe_who_pneumonia",
       who_pneumonia ~ "who_pneumonia",
+      imci_secondary_outcome ~ "imci_secondary_outcome",
       TRUE ~ "not_pneumonia"
     ),
     case_group = factor(
       case_group,
       c(
-        "not_pneumonia", "who_pneumonia",
+        "not_pneumonia", "imci_secondary_outcome", "who_pneumonia",
         "severe_who_pneumonia", "hapin_pneumonia"
       )
     ),
@@ -439,6 +445,7 @@ pneumo_classified %>%
     case_group = recode(
       case_group,
       not_pneumonia = "Respiratory illness",
+      imci_secondary_outcome = "IMCI secondary outcome",
       who_pneumonia = "WHO pneumonia",
       severe_who_pneumonia = "WHO severe pneumonia",
       hapin_pneumonia = "HAPIN pneumonia"
@@ -482,7 +489,11 @@ pneumo_classified %>%
 pneumo_classified %>%
   mutate(ari = TRUE) %>%
   filter(group == "respiratory illnesses") %>% 
-  gather(key = pneumo, value = value, ari, who_pneumonia, who_pneumonia_severe, hapin_pneumonia) %>%
+  gather(
+    key = pneumo, value = value,
+    ari, imci_secondary_outcome,
+    who_pneumonia, who_pneumonia_severe, hapin_pneumonia
+  ) %>%
   filter(value) %>%
   count(study, group, service_type, period, pneumo) %>%
   spread(service_type, n) %>%
@@ -504,14 +515,14 @@ pneumo_classified %>%
   filter(respiratory) %>%
   select(
     record_id, age_group,
-    who_pneumonia,
+    imci_secondary_outcome, who_pneumonia,
     severe_who_pneumonia = who_pneumonia_severe,
     hapin_pneumonia,
     tachypnea, chest_indrawing, danger_signs, hypoxemia, lus_pneumonia
   ) %>%
   gather(
     key = case_group, value = value,
-    who_pneumonia, severe_who_pneumonia, hapin_pneumonia,
+    imci_secondary_outcome, who_pneumonia, severe_who_pneumonia, hapin_pneumonia,
     factor_key = TRUE
   ) %>%
   filter(value) %>%
@@ -624,6 +635,7 @@ pneumo_classified %>%
     chest_indrawing,
     who_pneumonia,
     danger_signs,
+    imci_secondary_outcome,
     who_pneumonia_severe,
     hypoxemia,
     lus_pneumonia,
@@ -638,16 +650,20 @@ pneumo_classified %>%
       TRUE ~ "none"
     ),
     definition2 = case_when(
+      respiratory & danger_signs ~ "both",
+      TRUE ~ "none"
+    ),
+    definition3 = case_when(
       respiratory & tachypnea & chest_indrawing ~ "both",
       respiratory & tachypnea ~ "first",
       respiratory & chest_indrawing ~ "second",
       TRUE ~ "none"
     ),
-    definition3 = case_when(
+    definition4 = case_when(
       who_pneumonia & danger_signs ~ "first",
       TRUE ~ "none"
     ),
-    definition4 = case_when(
+    definition5 = case_when(
       who_pneumonia_severe & hypoxemia & lus_pneumonia ~ "both",
       who_pneumonia_severe & hypoxemia ~ "first",
       who_pneumonia_severe & lus_pneumonia ~ "second",
@@ -661,21 +677,24 @@ pneumo_classified %>%
     panel = recode_factor(
       gsub("[a-z_]", "", as.character(group)),
       "1" = "Respiratory illness",
-      "2" = "WHO pneumonia",
-      "3" = "WHO severe pneumonia",
-      "4" = "HAPIN pneumonia"
+      "2" = "IMCI secondary outcome",
+      "3" = "WHO pneumonia",
+      "4" = "WHO severe pneumonia",
+      "5" = "HAPIN pneumonia"
     ),
     group = fct_relabel(
       group,
       recode,
       case_type1 = "Respiratory case",
-      case_type2 = "WHO pneumonia",
-      case_type3 = "WHO severe pneumonia",
-      case_type4 = "HAPIN pneumonia",
+      case_type2 = "IMCI secondary outcome",
+      case_type3 = "WHO pneumonia",
+      case_type4 = "WHO severe pneumonia",
+      case_type5 = "HAPIN pneumonia",
       definition1 = "a) Cough or b) difficulty breathing",
-      definition2 = "a) Chest indrawing or b) tachypnea",
-      definition3 = "a) Danger signs",
-      definition4 = "a) Hypoxemia or b) consolidation"
+      definition2 = "a) Cough or difficulty breathing and b) danger signs",
+      definition3 = "a) Chest indrawing or b) tachypnea",
+      definition4 = "a) WHO pneumonia and danger signs",
+      definition5 = "WHO severe pneumonia and a) Hypoxemia or b) consolidation"
     ),
     value = factor(
       value,
@@ -708,6 +727,7 @@ pneumo_classified %>%
       .ag <- first(.x$age_group)
       
       select(.x, -age_group) %>%
+        slice(seq(from = nrow(.), to = 1)) %>%
         knitr::kable(
         caption = paste(
           "Number of cases for each case definition, based on the symptoms,",
@@ -827,7 +847,10 @@ pneumo_weeks %>%
 
 weekly_cases <- surveillance_weeks %>%
   full_join(pneumo_weeks) %>%
-  gather(case_group, value, who_pneumonia, severe_who_pneumonia, hapin_pneumonia) %>%
+  gather(
+    key = case_group, value = value,
+    imci_secondary_outcome, who_pneumonia, severe_who_pneumonia, hapin_pneumonia
+  ) %>%
   mutate(
     case_label = recode_factor(
       case_group,
@@ -902,7 +925,11 @@ sp_plot %+%
 ```{r hapin-cases-listing, results='asis'}
 
 pneumo_classified %>%
-  filter(case_group %in% c("hapin_pneumonia", "severe_who_pneumonia")) %>%
+  filter(
+    case_group %in% c(
+      "imci_secondary_outcome", "hapin_pneumonia", "severe_who_pneumonia"
+    )
+  ) %>%
   select(
     record_id, municipality, service_type, case_group,
     cough, difficulty_breathing,
@@ -927,7 +954,7 @@ pneumo_classified %>%
   mutate(
     case_group = recode(case_group, !!!case_names)
   ) %>%
-  arrange(case_group) %>%
+  arrange(case_group, !grepl("pneumonia", Symptoms)) %>%
   column_to_rownames("record_id") %>%
   set_names(gsub("_", "\n", names(.))) %>%
   pander::pandoc.table(
