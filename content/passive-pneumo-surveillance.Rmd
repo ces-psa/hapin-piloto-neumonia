@@ -205,7 +205,7 @@ pneumo_classified_old <- pneumo_visits %>%
     age_group = case_when(
       age_months < 2 ~ "0 - <2 months",
       age_months < 12 ~ "02 - <12 months",
-      age_months < 12*5 ~ "12 - <60 months",
+      age_months < 12*2 ~ "12 - <24 months",
       TRUE ~ NA_character_
     ),
     cough = a01 == "1" & !is.na(a01),
@@ -215,7 +215,7 @@ pneumo_classified_old <- pneumo_visits %>%
     tachypnea = case_when(
       age_group == "0 - <2 months" & rr >= 60 ~ TRUE,
       age_group == "02 - <12 months" & rr >= 50 ~ TRUE,
-      age_group == "12 - <60 months"  & rr >= 40 ~ TRUE,
+      age_group == "12 - <24 months"  & rr >= 40 ~ TRUE,
       is.na(rr) ~ NA,
       TRUE ~ FALSE
     ),
@@ -309,7 +309,7 @@ pneumo_classified_new <- pneumo_visits_new %>%
     age_group = case_when(
       age_months < 2 ~ "0 - <2 months",
       age_months < 12 ~ "02 - <12 months",
-      age_months < 12*5 ~ "12 - <60 months",
+      age_months < 12*2 ~ "12 - <24 months",
       TRUE ~ NA_character_
     ),
     cough = (a01 == "1" & !is.na(a01)) & (a01_1 < 14 & !is.na(a01_1)),
@@ -319,7 +319,7 @@ pneumo_classified_new <- pneumo_visits_new %>%
     tachypnea = case_when(
       age_group == "0 - <2 months" & rr >= 60 ~ TRUE,
       age_group == "02 - <12 months" & rr >= 50 ~ TRUE,
-      age_group == "12 - <60 months"  & rr >= 40 ~ TRUE,
+      age_group == "12 - <24 months"  & rr >= 40 ~ TRUE,
       is.na(rr) ~ NA,
       TRUE ~ FALSE
     ),
@@ -395,7 +395,8 @@ pneumo_classified_new <- pneumo_visits_new %>%
 pneumo_classified <- bind_rows(
   pneumo_classified_old,
   pneumo_classified_new
-)
+) %>%
+  filter(age < 24)
 
 ```
 
@@ -937,7 +938,7 @@ measures_df <- pneumo_classified %>%
              ~age_group, ~oxy_mean, ~rr,
         "0 - <2 months",        95,  60,
       "02 - <12 months",        95,  50,
-      "12 - <60 months",        95,  40
+      "12 - <24 months",        95,  40
     ) %>%
       gather(variable, limit, -age_group)
   ) %>%
