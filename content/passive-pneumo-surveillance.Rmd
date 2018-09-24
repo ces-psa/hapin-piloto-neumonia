@@ -910,24 +910,24 @@ pneumo_classified %>%
     danger_signs,
     hypoxemia, lus_pneumonia
   ) %>%
-    gather(
-        symptom, present,
-        -c(record_id, municipality, service_type, case_group),
-        factor_key = TRUE
-    ) %>%
-    arrange(record_id) %>%
-    filter(present == 1) %>%
-    group_by(record_id, municipality, service_type, case_group) %>%
-    summarize(
-        Symptoms = symptom %>%
-            gsub("_", " ", .) %>%
-            paste(collapse = ",\n")
-    ) %>%
-    ungroup() %>%
-    mutate(
-        case_group = recode(case_group, !!!case_names)
-    ) %>%
-    arrange(case_group) %>%
+  gather(
+    symptom, present,
+    -c(record_id, municipality, service_type, case_group),
+    factor_key = TRUE
+  ) %>%
+  arrange(record_id) %>%
+  filter(present == 1) %>%
+  group_by(record_id, municipality, service_type, case_group) %>%
+  summarize(
+    Symptoms = symptom %>%
+      gsub("_", " ", .) %>%
+      paste(collapse = ",\n")
+  ) %>%
+  ungroup() %>%
+  mutate(
+    case_group = recode(case_group, !!!case_names)
+  ) %>%
+  arrange(case_group) %>%
   column_to_rownames("record_id") %>%
   set_names(gsub("_", "\n", names(.))) %>%
   pander::pandoc.table(
