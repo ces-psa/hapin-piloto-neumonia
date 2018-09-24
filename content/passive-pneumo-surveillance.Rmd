@@ -183,6 +183,10 @@ lus_results <- lus_data_emory %>%
 # Neumonia Severa           xxxxx
 
 
+#------------------------------------------------------------------------------*
+# Data from previous RedCap form (< 2018-08-15) ----
+#------------------------------------------------------------------------------*
+
 pneumo_classified_old <- pneumo_visits %>%
   left_join(lus_results) %>%
   # leave out household surveillance data
@@ -281,6 +285,12 @@ pneumo_classified_old <- pneumo_visits %>%
   ) %>%
   filter(date >= as.Date("2018-02-20"))
 
+
+
+
+#------------------------------------------------------------------------------*
+# Data from current RedCap form (>= 2018-08-15) ----
+#------------------------------------------------------------------------------*
 
 pneumo_classified_new <- pneumo_visits_new %>%
   left_join(lus_results) %>%
@@ -391,6 +401,10 @@ pneumo_classified_new <- pneumo_visits_new %>%
 
 
 
+
+#------------------------------------------------------------------------------*
+# Join all collected cases ----
+#------------------------------------------------------------------------------*
 
 pneumo_classified <- bind_rows(
   pneumo_classified_old,
