@@ -530,6 +530,7 @@ pneumo_classified %>%
   mutate(
     n = n(),
     case_label = recode_factor(case_group, !!!case_names),
+    lus_performed = !is.na(lus_pneumonia)
   ) %>%
   ungroup() %>%
   select(record_id, age_group, case_group, everything(), -value) %>%
@@ -545,6 +546,7 @@ pneumo_classified %>%
       chest_indrawing = "Chest indrawing",
       danger_signs = "Danger signs",
       hypoxemia = "Hypoxemia",
+      lus_performed = "Ultrasound performed",
       lus_pneumonia = "Ultrasound confirmed pneumonia"
     )
   ) %>%
