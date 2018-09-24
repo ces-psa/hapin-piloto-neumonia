@@ -695,8 +695,8 @@ pneumo_classified %>%
       definition1 = "a) Cough or b) difficulty breathing",
       definition2 = "a) Cough or difficulty breathing and b) danger signs",
       definition3 = "a) Chest indrawing or b) tachypnea",
-      definition4 = "a) WHO pneumonia and danger signs",
-      definition5 = "WHO severe pneumonia and a) Hypoxemia or b) consolidation"
+      definition4 = "a) Danger signs",
+      definition5 = "a) Hypoxemia or b) consolidation"
     ),
     value = factor(
       value,
