@@ -1135,3 +1135,123 @@ sp_plot %+%
 
 ```
 
+
+
+# Clinical diagnosis
+
+The table below shows the clinical diagnosis that was assigned by the treating physician, based on the options recorded by the PINS case report form.
+
+```{r, results='asis'}
+pneumo_visits_new %>%
+  left_join(lus_results) %>%
+  mutate(
+    sex = recode_factor(
+      sexo,
+      `1` = "female",
+      `2` = "male"
+    ),
+    age_days = as.numeric(today - dateofbirth, unit = "days"),
+    age_months = age_days / ml,
+    age_group = case_when(
+      age_months < 2 ~ "0 - <2 months",
+      age_months < 12 ~ "02 - <12 months",
+      age_months < 12*2 ~ "12 - <24 months",
+      TRUE ~ NA_character_
+    ),
+    fever = d01_2 > 37.5 & !is.na(d01_2),
+    hypothermia = d01_2 < 35.5 & !is.na(d01_2),
+    danger_signs = (
+      c01 == 1 | c02 == 1 | c04 == 1 | c05 == 1 | c06 == 1
+    ) | (
+      age_group == "0 - <2 months" & (
+        c07 == 1 | c08 == 1 | c09 == 1 | c10 == 1 | c11 == 1 |
+          c12 == 1 | c13 == 1 | c14 == 1 | c15 == 1 | c16 == 1 | c17 == 1 |
+          fever | hypothermia
+      )
+    ),
+    cough = (a01 == "1" & !is.na(a01)) & (a01_1 < 14 & !is.na(a01_1)),
+    difficulty_breathing = (a02 == "1" & !is.na(a02)) & (a02_1 < 14 & !is.na(a02_1)),
+    respiratory = cough | difficulty_breathing,
+    imci_secondary_outcome = respiratory & danger_signs,
+    case_group = case_when(
+      neumo_hapin == 1 ~ "hapin_pneumonia",
+      neumo_severa_oms == 1 ~ "severe_who_pneumonia",
+      neumo_oms == 1 ~ "who_pneumonia",
+      imci_secondary_outcome ~ "imci_secondary_outcome",
+      respiratory ~ "respiratory",
+      TRUE ~ "not_respiratory"
+    ),
+    case_group = factor(
+      case_group,
+      c(
+        "not_pneumonia", "respiratory", "imci_secondary_outcome", "who_pneumonia",
+        "severe_who_pneumonia", "hapin_pneumonia"
+      )
+    ),
+    case_group = recode_factor(
+      case_group,
+      !!!case_names
+    ),
+    diagnosis = recode_factor(
+      f09,
+      `1` = "Pneumonia",
+      `2` = "Asthma",
+      `3` = "Bronchiolitis",
+      `4` = "Croup",
+      `5` = "Sepsis",
+      `6` = "Other"
+    )
+  ) %>%
+  select(
+    record_id, case_group, diagnosis, diagnosis_other = f09_1
+  ) %>%
+  filter(case_group != "not_pneumonia") %>%
+  group_by(diagnosis, case_group) %>%
+  summarize(
+    n = n(),
+    diagnosis_other = diagnosis_other %>%
+      tolower() %>%
+      recode(
+        brinquitis = "bronquitis",
+        broncomonia = "bronconeumonia",
+        broncobeumonia = "bronconeumonia",
+        broconeumonia = "bronconeumonia",
+        "gripe comun" = "resfriado comun",
+        resfriado = "resfriado comun"
+      ) %>%
+      sort() %>%
+      paste(collapse = "; ")
+  ) %>%
+  ungroup() %>% {
+    data <- .
+    
+    data %>%
+      select(-diagnosis_other) %>%
+      rename("Case type" = case_group) %>%
+      spread(key = diagnosis, value = n, fill = "") %>%
+      knitr::kable(
+        caption = "Clinical diagnosis by treating physician."
+      ) %>%
+      print()
+    
+    data %>%
+      filter(diagnosis == "Other") %>%
+      separate_rows(diagnosis_other, sep = "; *") %>%
+      mutate(
+        diagnosis_other = fct_infreq(diagnosis_other)
+      ) %>%
+      select(-diagnosis, -n) %>%
+      count(diagnosis_other, case_group) %>%
+      spread(key = case_group, value = n, fill = "") %>%
+      rename("Diagnosis name" = diagnosis_other) %>%
+      knitr::kable(
+        caption = "Other diagnosis not considered in standardized list"
+      ) %>%
+      print()
+    
+    invisible(data)
+  }
+```
+
+
+
