@@ -58,6 +58,8 @@ ml <- 365.25 / 12
 # Labelling
 
 case_names <- c(
+  "not_respiratory" = "Not respiratory illness",
+  "respiratory" = "Respiratory illness",
   "not_pneumonia" = "Not pneumonia",
   "imci_secondary_outcome" = "IMCI secondary outcome",
   "who_pneumonia" = "WHO pneumonia",
@@ -66,6 +68,8 @@ case_names <- c(
 )
 
 case_names_sp <- c(
+  "not_respiratory" = "No enfermedad respiratoria",
+  "respiratory" = "Enfermedad respiratoria",
   "not_pneumonia" = "No neumonía",
   "imci_secondary_outcome" = "Caso AIEPI", 
   "who_pneumonia" = "Neumonía OMS",
