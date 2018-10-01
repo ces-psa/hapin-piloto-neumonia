@@ -567,20 +567,20 @@ pneumo_classified %>%
   ) %>%
   ungroup() %>%
   spread(symptom, text) %>%
-  split(.$age_group) %>%
-  purrr::walk(
-      ~ {
-          .ag <- first(.x$age_group)
-        
-          rename(.x, " " = case_label) %>%
-            select(-age_group) %>%
-            knitr::kable(
-                caption = paste(
-                    "Characteristics of pneumonia cases for children of age", .ag, "months."
-                )
-            ) %>%
-            print()
-      }
+  mutate(
+    age_group = if_else(
+      condition = duplicated(age_group),
+      true = "",
+      false = age_group
+    )
+  ) %>%
+  rename(
+    "Age group" = age_group, "Case type" = case_label
+  ) %>%
+  knitr::kable(
+    caption = paste(
+      "Characteristics of pneumonia cases by age group."
+    )
   )
 
 
@@ -819,29 +819,29 @@ pneumo_weeks %>%
     vars(-age_group, -service_type, -week),
     funs(round(sum(., na.rm = TRUE)))
   ) %>%
-  select(
-    age_group,
-    "Service type" = service_type,
-    !!!cr(case_names), -not_pneumonia
-  ) %>%
   ungroup() %>%
-  split(.$age_group) %>%
-  walk(
-    ~{
-      .ag <- first(.x$age_group)
-      
-      select(.x, -age_group) %>%
-        knitr::kable(
-          caption = paste(
-            "\\label{pneumo-cases}Number of each pneumonia definition detected by service type",
-            "for children of age", .ag,
-            "Each case is only included within the most severe case definition",
-            "that applies to it.",
-            "Surveillance effort recorded in person-hours (days present in service)."
-          )
-        ) %>%
-        print()
-    }
+  mutate(
+    age_group = if_else(
+      condition = duplicated(age_group),
+      true = "",
+      false = age_group
+    )
+  ) %>%
+  select(
+    "Age group" = age_group,
+    "Service type" = service_type,
+    cr(
+      case_names[!case_names %in% c("Not respiratory illness", "Respiratory illness")]
+    ),
+    -not_pneumonia
+  ) %>%
+  knitr::kable(
+    caption = paste(
+      "\\label{pneumo-cases}Number of each pneumonia definition detected by service type.",
+      "Each case is only included within the most severe case definition",
+      "that applies to it.",
+      "Surveillance effort recorded in person-hours (days present in service)."
+    )
   )
 ```
 
