@@ -26,7 +26,7 @@ file <- list.files(
   path = "data/exports", pattern = "*.csv", full.names = TRUE
 ) %>%
   grep("Guatemala", ., ignore.case = TRUE, value = TRUE) %>%
-  data_frame(
+  tibble(
     file = .,
     export_date = lubridate::ymd_hm(
       gsub("[^0-9]+_([-0-9_]+).csv", "\\1", .)

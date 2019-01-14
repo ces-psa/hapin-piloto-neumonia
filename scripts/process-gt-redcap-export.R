@@ -25,7 +25,7 @@ file <- list.files(
   path = "data/exports", pattern = "*.csv", full.names = TRUE
 ) %>%
   grep("vigilancia", ., ignore.case = TRUE, value = TRUE) %>%
-  data_frame(
+  tibble(
     file = .,
     set = case_when(
       grepl("piloto", file, ignore.case = TRUE) ~ "nuevo_piloto",

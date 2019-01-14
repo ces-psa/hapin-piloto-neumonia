@@ -116,7 +116,7 @@ surveillance_effort <- esfuerzo %>%
 redcap_effort <- list.files(
   path = "data/exports", pattern = "ESFUERZO", full.names = TRUE
 ) %>%
-  data_frame(
+  tibble(
     file = .,
     time = lubridate::ymd_hm(gsub("[^0-9]+([-0-9_]+)[.]csv", "\\1", file))
   ) %>%
