@@ -89,9 +89,9 @@ cr <- function(x){
 
 ```{r get-data, include=FALSE}
 # RedCap exports
-source(file = "./scripts/process-emory-redcap-export.R")
-source(file = "./scripts/process-gt-redcap-export.R")
-source(file = "./scripts/surveillance-effort.R")
+source(file = "./scripts/process-emory-redcap-export.R", encoding = "UTF-8")
+source(file = "./scripts/process-gt-redcap-export.R", encoding = "UTF-8")
+source(file = "./scripts/surveillance-effort.R", encoding = "UTF-8")
 # source(file = "./scripts/rr-oxy.R")
 ```
 
