@@ -87,7 +87,7 @@ esfuerzo <- esfuerzo %>%
   )
 
 
-surveillance_effort <- esfuerzo %>%
+surveillance_effort_manual <- esfuerzo %>%
   select(
     date = fecha, municipality = municipio, community = comunidad,
     service_type = sitio_vigilancia, surveillance_personnel = personal,
@@ -125,7 +125,7 @@ redcap_effort <- list.files(
   read_csv()
 
 
-redcap_effort <- redcap_effort %>%
+redcap_effort_harmonized <- redcap_effort %>%
   # de-code variable
   mutate(
     municipio = recode(
@@ -161,10 +161,52 @@ redcap_effort <- redcap_effort %>%
     community = comunidad,
     service_type = hospital,
     surveillance_personnel = encuestador,
-    start_time = hms::as.hms(time_start),
-    end_time = time_end,
+    start_time = time_start %>% substr(12, 16) %>% paste0(":0") %>% hms::as.hms(),
+    end_time = time_end
+  ) %>%
+  mutate(
+    tt = start_time,
+    start_time = if_else(
+      condition = tt < end_time,
+      true = start_time,
+      false = end_time
+    ),
+    end_time = if_else(
+      condition = tt > end_time,
+      true = tt,
+      false = end_time
+    ),
     surveillance_time = as.numeric(end_time - start_time, units = "hours")
+  ) %>%
+  select(-tt)
+
+
+
+# Join both
+surveillance_effort <- surveillance_effort_manual %>%
+  bind_rows(redcap_effort_harmonized) %>%
+  # fixes
+  mutate(
+    date = case_when(
+      lubridate::year(date) == 2108 ~ lubridate::`year<-`(date, 2018),
+      date == as.Date("2017-01-24") ~ as.Date("2018-01-24"),
+      TRUE ~ date
+    )
   )
+
+
+write_csv(
+  x = surveillance_effort,
+  path = "output/surveillance_effort.csv"
+)
+
+
+surveillance_effort %>%
+  ggplot() +
+  geom_tile(
+    aes(x = date, y = start_time, width = 1, height = surveillance_time * 3600)
+  )
+
 
 
 

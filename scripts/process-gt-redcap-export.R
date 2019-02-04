@@ -48,7 +48,7 @@ pneumo_visits_wide <- read_csv(
 # LUS data
 lus_data_uvg <- read_csv(file = file$file[file$set == "nuevo_piloto"]) %>%
   select(
-    record_id, c34_date, c34_normal, c34_interpretable,
+    record_id, c34_date, lus_by = c34_by, c34_normal, c34_interpretable,
     c34_pneumonia, c34_atelectasis, c34_interstitial
   ) %>%
   set_names(gsub("^c34_", "", names(.))) %>%

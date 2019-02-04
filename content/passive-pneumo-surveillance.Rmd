@@ -267,7 +267,8 @@ pneumo_classified_old <- pneumo_visits %>%
   #     select(log_date = date, record_id, service_type)
   # ) %>%
   select(
-    municipality, date = today, time, service_type, period, #log_date,
+    municipality, date = today, time, interviewer, lus_by,
+    service_type, period, #log_date,
     record_id, study, group, age_months, age, age_group,
     cough, difficulty_breathing, chest_indrawing,
     rr, tachypnea, danger_signs, oxy_mean, hypoxemia,
@@ -349,7 +350,7 @@ pneumo_classified_new <- pneumo_visits_new %>%
     ) | (
       age_group == "0 - <2 months" & (
         c07 == 1 | c08 == 1 | c09 == 1 | c10 == 1 | c11 == 1 |
-          c12 == 1 | c13 == 1 | c14 == 1 | c15 == 1 | c16 == 1 | c17 == 1 |
+          c12 == 1 | c13 == 1 | c14 == 1 | c16 == 1 | c17 == 1 |
           fever | hypothermia
       )
     ),
@@ -383,7 +384,8 @@ pneumo_classified_new <- pneumo_visits_new %>%
   #     select(log_date = date, record_id, service_type)
   # ) %>%
   select(
-    municipality, date = today, time, service_type, period, #log_date,
+    municipality, date = today, time, interviewer, lus_by,
+    service_type, period, #log_date,
     record_id, study, group, age_months, age, age_group, sex,
     cough, difficulty_breathing, chest_indrawing,
     rr, tachypnea, danger_signs, oxy_mean, hypoxemia,
@@ -424,6 +426,48 @@ pneumo_classified <- bind_rows(
   filter(age < 24)
 
 ```
+
+
+# Overall
+
+```{r}
+pneumo_classified %>%
+  filter(!is.na(municipality)) %>%
+  mutate(
+    sex = if_else(
+      condition = is.na(sex),
+      true = "not recorded",
+      false = as.character(sex)
+    )
+  ) %>%
+  count(municipality, age_group, case_group) %>%
+  mutate(
+    case_group = recode(
+      case_group,
+      not_pneumonia = "Respiratory illness",
+      imci_secondary_outcome = "IMCI secondary outcome",
+      who_pneumonia = "WHO pneumonia",
+      severe_who_pneumonia = "WHO severe pneumonia",
+      hapin_pneumonia = "HAPIN pneumonia"
+    )
+  ) %>%
+  spread(age_group, n, fill = "") %>%
+  mutate(
+    municipality = if_else(
+      condition = duplicated(municipality),
+      true = "",
+      false = municipality
+    )
+  ) %>%
+  set_names(
+    names(.) %>%
+      gsub("_", " ", .)
+  ) %>%
+  knitr::kable(
+    caption = "Cases by type and age group."
+  )
+```
+
 
 
 
@@ -648,6 +692,7 @@ pneumo_classified %>%
     lus_pneumonia,
     hapin_pneumonia
   ) %>%
+  filter(!is.na(age_group)) %>%
   transmute(
     age_group,
     definition1 = case_when(
@@ -1165,7 +1210,7 @@ pneumo_visits_new %>%
     ) | (
       age_group == "0 - <2 months" & (
         c07 == 1 | c08 == 1 | c09 == 1 | c10 == 1 | c11 == 1 |
-          c12 == 1 | c13 == 1 | c14 == 1 | c15 == 1 | c16 == 1 | c17 == 1 |
+          c12 == 1 | c13 == 1 | c14 == 1 | c16 == 1 | c17 == 1 |
           fever | hypothermia
       )
     ),
